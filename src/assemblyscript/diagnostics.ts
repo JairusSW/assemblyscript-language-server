@@ -8,6 +8,7 @@
 import * as lsp from 'vscode-languageserver';
 import type { DiagnosticMessage } from 'assemblyscript';
 import type { LspDocument } from '../document.js';
+import type { ProjectConfigDiagnostic } from './asProjectService.js';
 
 /** The `source` attached to diagnostics produced by AssemblyScript analysis. */
 export const ASSEMBLYSCRIPT_DIAGNOSTIC_SOURCE = 'assemblyscript';
@@ -73,4 +74,19 @@ export function toLspDiagnostic(message: DiagnosticMessage, document: LspDocumen
 /** Translate a list of AssemblyScript diagnostics for a single document. */
 export function toLspDiagnostics(messages: readonly DiagnosticMessage[], document: LspDocument): lsp.Diagnostic[] {
     return messages.map(message => toLspDiagnostic(message, document));
+}
+
+/**
+ * Translate an `asconfig.json` resolution problem into an LSP diagnostic. The
+ * problem is anchored at the start of the config file (precise JSON positions
+ * arrive when config parsing tracks offsets).
+ */
+export function toLspConfigDiagnostic(diagnostic: ProjectConfigDiagnostic): lsp.Diagnostic {
+    const start = lsp.Position.create(0, 0);
+    return {
+        range: lsp.Range.create(start, start),
+        message: diagnostic.message,
+        severity: diagnostic.severity === 'error' ? lsp.DiagnosticSeverity.Error : lsp.DiagnosticSeverity.Warning,
+        source: ASSEMBLYSCRIPT_DIAGNOSTIC_SOURCE,
+    };
 }

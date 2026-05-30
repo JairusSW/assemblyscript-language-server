@@ -13,7 +13,8 @@ import type { LspClient } from '../lsp-client.js';
 import type { Logger } from '../utils/logger.js';
 import { PrefixingLogger } from '../utils/logger.js';
 import type { LanguageService } from '../languageService.js';
-import { toLspDiagnostics } from './diagnostics.js';
+import { toLspDiagnostics, toLspConfigDiagnostic } from './diagnostics.js';
+import { AsProjectService } from './asProjectService.js';
 
 /**
  * AssemblyScript-native analysis backend.
@@ -29,13 +30,16 @@ export class AssemblyScriptLanguageService implements LanguageService {
 
     private readonly logger: Logger;
     private readonly documents = new Map<string, LspDocument>();
+    private readonly projectService: AsProjectService;
 
     constructor(
         // Retained for the diagnostics/analysis work that lands in later phases.
         private readonly lspClient: LspClient,
         logger: Logger,
+        projectService: AsProjectService = new AsProjectService(),
     ) {
         this.logger = new PrefixingLogger(logger, '[assemblyscript]');
+        this.projectService = projectService;
     }
 
     private static key(uri: lsp.DocumentUri): string {
@@ -72,6 +76,7 @@ export class AssemblyScriptLanguageService implements LanguageService {
         this.documents.set(key, document);
         this.logger.log(`Opened AssemblyScript document ${textDocument.uri} (languageId: ${textDocument.languageId}).`);
         this.validate(document);
+        this.validateProject(document);
         return true;
     }
 
@@ -88,6 +93,7 @@ export class AssemblyScriptLanguageService implements LanguageService {
             document.applyEdit(textDocument.version, change);
         }
         this.validate(document);
+        this.validateProject(document);
     }
 
     /**
@@ -109,6 +115,26 @@ export class AssemblyScriptLanguageService implements LanguageService {
     /** A forward-slash-normalized path for the AssemblyScript parser/source. */
     private static parsePath(document: LspDocument): string {
         return document.filepath.replace(/\\/g, '/');
+    }
+
+    /**
+     * Resolve the document's `asconfig.json` project and publish any config
+     * problems against the config file. Publishing an empty list clears stale
+     * problems once the config is fixed.
+     *
+     * TODO(step 7): invalidate the project cache from `asconfig.json` watch
+     * events so config edits refresh without reopening a member document.
+     */
+    private validateProject(document: LspDocument): void {
+        const project = this.projectService.resolveProjectForFile(document.filepath);
+        if (!project) {
+            return;
+        }
+        const uri = URI.file(project.configPath).toString();
+        this.lspClient.publishDiagnostics({
+            uri,
+            diagnostics: project.diagnostics.map(toLspConfigDiagnostic),
+        });
     }
 
     closeDocument(uri: lsp.DocumentUri): void {

@@ -45,3 +45,10 @@ for that history. Entries below cover changes made in this fork.
   with the compile service in a later phase.
 * Externalize `assemblyscript` from the bundle (it is a runtime dependency),
   keeping `lib/cli.mjs` lean instead of inlining the entire compiler.
+* Add an `AsProjectService` that discovers and resolves `asconfig.json`
+  projects: resolves `extends`, merges the selected target's options over the
+  top-level options (default target `release`), resolves `entries` to absolute
+  paths, and caches resolutions by config path + target. Invalid JSON, missing
+  extended configs, circular `extends`, and unknown targets are surfaced as
+  diagnostics against the `asconfig.json` when a member document is opened.
+  (Watcher-driven cache invalidation arrives with the file-watching phase.)

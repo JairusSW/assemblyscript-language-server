@@ -5,7 +5,11 @@
  * You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0
  */
 
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import * as lsp from 'vscode-languageserver';
+import { URI } from 'vscode-uri';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { uri, createServer, type TestLspServer } from '../test-utils.js';
 
@@ -87,5 +91,36 @@ describe('AssemblyScript document routing', () => {
         expect(diagnostics.get(docUri)?.diagnostics).toEqual([]);
 
         server.didCloseTextDocument({ textDocument: { uri: docUri } });
+    });
+});
+
+describe('AssemblyScript project config diagnostics', () => {
+    let root: string;
+
+    beforeAll(() => {
+        root = mkdtempSync(join(tmpdir(), 'asls-cfg-'));
+        writeFileSync(join(root, 'asconfig.json'), '{ this is not valid json ');
+        mkdirSync(join(root, 'assembly'));
+        writeFileSync(join(root, 'assembly', 'index.ts'), 'export function f(): void {}\n');
+    });
+
+    afterAll(() => {
+        rmSync(root, { recursive: true, force: true });
+    });
+
+    it('reports an invalid asconfig.json against the config file when a member document opens', () => {
+        const memberUri = URI.file(join(root, 'assembly', 'index.ts')).toString();
+        const configUri = URI.file(join(root, 'asconfig.json')).toString();
+
+        server.didOpenTextDocument({
+            textDocument: { uri: memberUri, languageId: 'assemblyscript', version: 1, text: 'export function f(): void {}\n' },
+        });
+
+        const configDiagnostics = diagnostics.get(configUri)?.diagnostics ?? [];
+        expect(configDiagnostics.length).toBeGreaterThan(0);
+        expect(configDiagnostics[0].source).toBe('assemblyscript');
+        expect(configDiagnostics[0].message).toMatch(/Invalid JSON/);
+
+        server.didCloseTextDocument({ textDocument: { uri: memberUri } });
     });
 });
