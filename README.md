@@ -1,8 +1,4 @@
-[![Discord][discord-src]][discord-href]
-[![npm version][npm-version-src]][npm-version-href]
-[![npm downloads][npm-downloads-src]][npm-downloads-href]
-
-# TypeScript Language Server
+# AssemblyScript Language Server
 
 <!-- MarkdownTOC -->
 
@@ -11,6 +7,7 @@
 - [Running the language server](#running-the-language-server)
 - [CLI Options](#cli-options)
 - [Configuration](#configuration)
+- [AssemblyScript support](#assemblyscript-support)
 - [Features](#features)
     - [Code actions on save](#code-actions-on-save)
     - [Workspace commands \(`workspace/executeCommand`\)](#workspace-commands-workspaceexecutecommand)
@@ -22,7 +19,7 @@
         - [Configure plugin](#configure-plugin)
     - [Code Lenses \(`textDocument/codeLens`\)](#code-lenses-textdocumentcodelens)
     - [Inlay hints \(`textDocument/inlayHint`\)](#inlay-hints-textdocumentinlayhint)
-    - [TypeScript Version Notification](#typescript-version-notification)
+    - [Language Server Version Notification](#language-server-version-notification)
     - [Workspace Configuration request for formatting settings](#workspace-configuration-request-for-formatting-settings)
 - [Development](#development)
     - [Build](#build)
@@ -34,30 +31,32 @@
 
 ## What is it, exactly?
 
-The [TypeScript](https://github.com/microsoft/TypeScript) project/package includes a `tsserver` component which provides a custom API that can be used for gathering various intelligence about a typescript/javascript project. The [VSCode](https://github.com/microsoft/vscode) team has built a project called `Typescript Language Features` (and bundled it as an internal extension in VSCode) that provides code intelligence for your javascript and typescript projects by utilizing that `tsserver` API. Since that extension doesn't use the standardized [Language Server Protocol](https://microsoft.github.io/language-server-protocol/) to communicate with the editor, other editors that implement LSP can't directly utilize it. Here is where the `TypeScript Language Server` project comes in with the aim to provide a thin LSP interface on top of that extension's code base for the benefit of all other editors that implement the LSP protocol.
+[AssemblyScript](https://www.assemblyscript.org) is a variant of TypeScript that compiles to WebAssembly. It has its own compiler (`asc`), its own project configuration (`asconfig.json`), its own numeric type system (`i32`, `u64`, `f32`, `usize`, …), and language features (decorators like `@inline`/`@external`/`@operator`, operator overloading) that a stock TypeScript language server does not understand. The aim of this project is to provide a [Language Server Protocol](https://microsoft.github.io/language-server-protocol/) implementation that understands AssemblyScript natively, so any LSP-capable editor gets correct diagnostics, hovers, completions, and navigation for `.as` and AssemblyScript `.ts` files.
 
-Originally based on concepts and ideas from https://github.com/prabirshrestha/typescript-language-server and maintained by [TypeFox](https://typefox.io). Currently maintained by a [community of contributors](https://github.com/typescript-language-server/typescript-language-server/graphs/contributors) like you.
+This is a fork of the excellent [`typescript-language-server`](https://github.com/typescript-language-server/typescript-language-server) (originally based on concepts from https://github.com/prabirshrestha/typescript-language-server and maintained by [TypeFox](https://typefox.io) and its contributors). It reuses that project's LSP transport, document handling, and protocol plumbing while replacing the source of truth with AssemblyScript-native analysis.
 
-This project is not directly associated with Microsoft and is not used in their [VSCode](https://github.com/microsoft/vscode) editor. If you have an issue with VSCode functionality, report it in their repository instead.
-
-Currently Microsoft is working on [TypeScript 7](https://github.com/microsoft/typescript-go) written natively in the go language that will include the LSP implementation and will hopefully supersede this project.
+> **Status:** AssemblyScript-native analysis is being introduced in phases. Until a given feature is backed by the AssemblyScript compiler, the server falls back to `tsserver` for TypeScript/JavaScript documents. See the [AssemblyScript support](#assemblyscript-support) section for what is wired up today.
 
 ## Installing
 
 ```sh
-npm install -g typescript-language-server typescript
+npm install -g assemblyscript-language-server
 ```
+
+The `assemblyscript` compiler is bundled as a dependency. For projects that still
+rely on the TypeScript/JavaScript fallback, install `typescript` in the workspace
+as usual.
 
 ## Running the language server
 
 ```
-typescript-language-server --stdio
+assemblyscript-language-server --stdio
 ```
 
 ## CLI Options
 
 ```
-  Usage: typescript-language-server [options]
+  Usage: assemblyscript-language-server [options]
 
 
   Options:
@@ -71,6 +70,45 @@ typescript-language-server --stdio
 ## Configuration
 
 See [configuration documentation](./docs/configuration.md).
+
+## AssemblyScript support
+
+This server is being converted from a TypeScript-first LSP into an
+AssemblyScript-first one. The sections below describe the project's intent and
+the routing model; individual features are migrated to AssemblyScript-native
+analysis in phases.
+
+### Document identity
+
+A document is treated as AssemblyScript when **any** of the following hold:
+
+ - it uses the `assemblyscript` language ID, or
+ - it has the `.as` extension, or
+ - it is a member of a project described by a nearby `asconfig.json` (including
+   the conventional `assembly/` directory, where AssemblyScript projects use
+   `.ts` entries).
+
+`.as` and AssemblyScript-flavored `.ts` are **co-equal** — neither is the
+"primary" extension. For any `.ts` that belongs to an AssemblyScript project,
+AssemblyScript analysis takes ownership so that diagnostics are not produced
+twice.
+
+### Projects (`asconfig.json`)
+
+[`asconfig.json`](https://www.assemblyscript.org/compiler.html#configuration-file)
+is the source of project truth for AssemblyScript: it declares `entries`,
+compiler `options`, named `targets`, and may `extends` another config. The
+server discovers the nearest `asconfig.json` from an open file upward to the
+workspace root and analyzes the file in that project's context. A
+`tsconfig.json` (e.g. `assembly/tsconfig.json`) is used only for editor/standard
+-library compatibility where AssemblyScript expects it.
+
+### TypeScript / JavaScript fallback
+
+Plain TypeScript and JavaScript documents that are **not** part of an
+AssemblyScript project continue to be served by `tsserver` as a compatibility
+fallback. AssemblyScript documents do not rely on `tsserver` for their semantic
+truth.
 
 ## Features
 
@@ -113,7 +151,7 @@ Request:
 
 ```ts
 {
-    command: '_typescript.goToSourceDefinition'
+    command: '_assemblyscript.goToSourceDefinition'
     arguments: [
         lsp.DocumentUri,  // String URI of the document
         lsp.Position,     // Line and character position (zero-based)
@@ -135,7 +173,7 @@ Request:
 
 ```ts
 {
-    command: '_typescript.applyRefactoring'
+    command: '_assemblyscript.applyRefactoring'
     arguments: [
         tsp.GetEditsForRefactorRequestArgs,
     ]
@@ -154,7 +192,7 @@ Request:
 
 ```ts
 {
-    command: '_typescript.organizeImports'
+    command: '_assemblyscript.organizeImports'
     arguments: [
         string,  // file path
         // Optional options:
@@ -182,7 +220,7 @@ Request:
 
 ```ts
 {
-    command: '_typescript.applyRenameFile'
+    command: '_assemblyscript.applyRenameFile'
     arguments: [
         { sourceUri: string; targetUri: string; },
     ]
@@ -233,7 +271,7 @@ Request:
 
 ```ts
 {
-    command: '_typescript.configurePlugin'
+    command: '_assemblyscript.configurePlugin'
     arguments: [pluginName: string, configuration: any]
 }
 ```
@@ -293,14 +331,14 @@ export interface InlayHintsOptions extends UserPreferences {
 }
 ```
 
-### TypeScript Version Notification
+### Language Server Version Notification
 
-Right after initializing, the server sends a custom `$/typescriptVersion` notification that carries information about the version of TypeScript that is utilized by the server. The editor can then display that information in the UI.
+Right after initializing, the server sends a custom `$/assemblyscriptVersion` notification that carries information about the version of the underlying analysis engine. The editor can then display that information in the UI. While the TypeScript fallback (`tsserver`) is the only engine, this carries the TypeScript version.
 
-The `$/typescriptVersion` notification params include two properties:
+The `$/assemblyscriptVersion` notification params include two properties:
 
  - `version` - a semantic version (for example `4.8.4`)
- - `source` - a string specifying whether used TypeScript version comes from the local workspace (`workspace`), is explicitly specified through a `initializationOptions.tsserver.path` setting (`user-setting`) or was bundled with the server (`bundled`)
+ - `source` - a string specifying whether the version comes from the local workspace (`workspace`), is explicitly specified through a `initializationOptions.tsserver.path` setting (`user-setting`) or was bundled with the server (`bundled`)
 
 
 ### Workspace Configuration request for formatting settings
@@ -341,9 +379,9 @@ By default only console logs of level `warning` and higher are printed to the co
 
 The project uses https://github.com/google-github-actions/release-please-action Github action to automatically release new version on merging a release PR.
 
-[npm-version-src]: https://img.shields.io/npm/dt/typescript-language-server.svg?style=flat-square
-[npm-version-href]: https://npmjs.com/package/typescript-language-server
-[npm-downloads-src]: https://img.shields.io/npm/v/typescript-language-server/latest.svg?style=flat-square
-[npm-downloads-href]: https://npmjs.com/package/typescript-language-server
-[discord-src]: https://img.shields.io/discord/873659987413573634?style=flat-square
-[discord-href]: https://discord.gg/AC7Vs6hwFa
+[npm-version-src]: https://img.shields.io/npm/dt/assemblyscript-language-server.svg?style=flat-square
+[npm-version-href]: https://npmjs.com/package/assemblyscript-language-server
+[npm-downloads-src]: https://img.shields.io/npm/v/assemblyscript-language-server/latest.svg?style=flat-square
+[npm-downloads-href]: https://npmjs.com/package/assemblyscript-language-server
+[discord-src]: https://img.shields.io/discord/721472913886281818?style=flat-square
+[discord-href]: https://discord.gg/assemblyscript

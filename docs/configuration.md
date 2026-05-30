@@ -1,5 +1,15 @@
 # Configuration
 
+> **Note:** AssemblyScript projects are configured through
+> [`asconfig.json`](https://www.assemblyscript.org/compiler.html#configuration-file),
+> which the server discovers automatically (see the
+> [AssemblyScript support](../README.md#assemblyscript-support) section). The
+> `initializationOptions` documented below — in particular the `tsserver` and
+> `preferences` options — configure the **TypeScript/JavaScript fallback**
+> engine and apply to non-AssemblyScript documents. AssemblyScript-specific
+> settings (target selection, diagnostics toggles) are documented here as they
+> are implemented.
+
 <!--toc:start-->
 - [Configuration](#configuration)
   - [initializationOptions](#initializationoptions)

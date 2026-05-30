@@ -15,7 +15,7 @@ import { toDocumentHighlight, toSymbolKind, toLocation, toSelectionRange, toText
 import type { LspDocument } from './document.js';
 import { asCompletionItems, asResolvedCompletionItem, type CompletionContext, CompletionDataCache, getCompletionTriggerCharacter } from './completion.js';
 import { asSignatureHelp, toTsTriggerReason } from './hover.js';
-import { Commands, TypescriptVersionNotification } from './commands.js';
+import { Commands, LanguageServerVersionNotification } from './commands.js';
 import { TSServerRequestCommand } from './commands/tsserverRequests.js';
 import { provideRefactors } from './refactor.js';
 import { organizeImportsCommands, provideOrganizeImports } from './organize-imports.js';
@@ -356,7 +356,7 @@ export class LspServer {
     public initialized(_: lsp.InitializedParams): void {
         const { apiVersion, typescriptVersionSource } = this.tsClient;
         // eslint-disable-next-line @typescript-eslint/no-floating-promises
-        this.options.lspClient.sendNotification(TypescriptVersionNotification, {
+        this.options.lspClient.sendNotification(LanguageServerVersionNotification, {
             version: apiVersion.displayName,
             source: typescriptVersionSource,
         });

@@ -10,20 +10,22 @@ import { SourceDefinitionCommand } from './features/source-definition.js';
 import type { TypeScriptVersionSource } from './tsServer/versionProvider.js';
 
 export const Commands = {
-    APPLY_REFACTORING: '_typescript.applyRefactoring',
-    CONFIGURE_PLUGIN: '_typescript.configurePlugin',
-    ORGANIZE_IMPORTS: '_typescript.organizeImports',
-    APPLY_RENAME_FILE: '_typescript.applyRenameFile',
-    APPLY_COMPLETION_CODE_ACTION: '_typescript.applyCompletionCodeAction',
+    APPLY_REFACTORING: '_assemblyscript.applyRefactoring',
+    CONFIGURE_PLUGIN: '_assemblyscript.configurePlugin',
+    ORGANIZE_IMPORTS: '_assemblyscript.organizeImports',
+    APPLY_RENAME_FILE: '_assemblyscript.applyRenameFile',
+    APPLY_COMPLETION_CODE_ACTION: '_assemblyscript.applyCompletionCodeAction',
     /** Commands below should be implemented by the client */
-    SELECT_REFACTORING: '_typescript.selectRefactoring',
+    SELECT_REFACTORING: '_assemblyscript.selectRefactoring',
     SOURCE_DEFINITION: SourceDefinitionCommand.id,
 };
 
-type TypescriptVersionNotificationParams = {
+type LanguageServerVersionNotificationParams = {
     version: string;
     source: TypeScriptVersionSource;
 };
 
-export const TypescriptVersionNotification = new lsp.NotificationType<TypescriptVersionNotificationParams>('$/typescriptVersion');
+// Reports the version of the underlying analysis engine. While the TypeScript
+// fallback (tsserver) is the only engine, this carries the TypeScript version.
+export const LanguageServerVersionNotification = new lsp.NotificationType<LanguageServerVersionNotificationParams>('$/assemblyscriptVersion');
 
