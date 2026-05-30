@@ -45,6 +45,9 @@ import { CodeActionKind } from './utils/types.js';
 import { CommandManager } from './commands/commandManager.js';
 import { CodeActionManager } from './features/codeActions/codeActionManager.js';
 import { WatchEventManager } from './watchEventManager.js';
+import { LanguageServiceRouter } from './languageService.js';
+import { TypeScriptLanguageService } from './typescriptLanguageService.js';
+import { AssemblyScriptLanguageService } from './assemblyscript/asService.js';
 
 export class LspServer {
     private tsClient: TsClient;
@@ -62,6 +65,8 @@ export class LspServer {
     private implementationsCodeLensProvider: TypeScriptImplementationsCodeLensProvider | null = null;
     private referencesCodeLensProvider: TypeScriptReferencesCodeLensProvider | null = null;
     private watchEventManager: WatchEventManager | null = null;
+    private asService: AssemblyScriptLanguageService;
+    private languageServiceRouter: LanguageServiceRouter;
 
     constructor(private options: LspServerConfiguration) {
         this.logger = new PrefixingLogger(options.logger, '[lspserver]');
@@ -76,12 +81,29 @@ export class LspServer {
         );
         this.codeActionsManager = new CodeActionManager(this.tsClient, this.fileConfigurationManager, this.commandManager, this.diagnosticsManager, this.features);
         this.commandManager.register(new TSServerRequestCommand(this.tsClient));
+        this.asService = new AssemblyScriptLanguageService(this.options.lspClient, this.logger);
+        this.languageServiceRouter = new LanguageServiceRouter(
+            this.asService,
+            new TypeScriptLanguageService({
+                tsClient: this.tsClient,
+                fileConfigurationManager: this.fileConfigurationManager,
+                diagnosticsManager: this.diagnosticsManager,
+                cachedNavTreeResponse: this.cachedNavTreeResponse,
+            }),
+        );
     }
 
     closeAllForTesting(): void {
         for (const document of this.tsClient.documentsForTesting.values()) {
             this.closeDocument(document.uri.toString());
         }
+        for (const document of this.asService.documentsForTesting.values()) {
+            this.closeDocument(document.uri.toString());
+        }
+    }
+
+    public get assemblyScriptServiceForTesting(): AssemblyScriptLanguageService {
+        return this.asService;
     }
 
     async waitForDiagnosticsForFile(uri: lsp.DocumentUri): Promise<void> {
@@ -423,18 +445,9 @@ export class LspServer {
 
     didOpenTextDocument(params: lsp.DidOpenTextDocumentParams): void {
         const { uri, languageId } = params.textDocument;
-
-        if (this.tsClient.toOpenDocument(uri, { suppressAlertOnFailure: true })) {
-            throw new Error(`Can't open already open document: ${uri}`);
-        }
-
-        if (!this.tsClient.openTextDocument(params.textDocument)) {
+        const service = this.languageServiceRouter.serviceForOpen(params.textDocument);
+        if (!service.openDocument(params.textDocument)) {
             throw new Error(`Cannot open document '${uri}' (languageId: ${languageId}).`);
-        }
-
-        const document = this.tsClient.toOpenDocument(uri);
-        if (document) {
-            this.fileConfigurationManager.onDidOpenTextDocument(document);
         }
     }
 
@@ -443,24 +456,11 @@ export class LspServer {
     }
 
     private closeDocument(uri: lsp.DocumentUri): void {
-        const document = this.tsClient.toOpenDocument(uri);
-        if (!document) {
-            throw new Error(`Trying to close not opened document: ${uri}`);
-        }
-        this.cachedNavTreeResponse.onDocumentClose(document);
-        this.tsClient.onDidCloseTextDocument(uri);
-        this.diagnosticsManager.onDidCloseFile(document.filepath);
-        this.fileConfigurationManager.onDidCloseTextDocument(document.uri);
+        this.languageServiceRouter.serviceForUri(uri).closeDocument(uri);
     }
 
     didChangeTextDocument(params: lsp.DidChangeTextDocumentParams): void {
-        if (this.fileConfigurationManager.workspaceConfiguration.diagnostics?.eagerClear) {
-            const document = this.tsClient.toOpenDocument(params.textDocument.uri);
-            if (document) {
-                this.diagnosticsManager.clearDiagnosticsForFile(document.filepath);
-            }
-        }
-        this.tsClient.onDidChangeTextDocument(params);
+        this.languageServiceRouter.serviceForUri(params.textDocument.uri).changeDocument(params);
     }
 
     didSaveTextDocument(_params: lsp.DidSaveTextDocumentParams): void {

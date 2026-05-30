@@ -30,3 +30,11 @@ for that history. Entries below cover changes made in this fork.
 * Document the AssemblyScript routing model (language ID, `.as` extension,
   `asconfig.json` projects, and the TypeScript/JavaScript fallback) in the
   README.
+* Introduce an engine-neutral `LanguageService` contract and a
+  `LanguageServiceRouter` that dispatches document-lifecycle events to the
+  owning backend. The existing `tsserver` pipeline is wrapped as
+  `TypeScriptLanguageService`; a new `AssemblyScriptLanguageService` takes
+  ownership of AssemblyScript documents so `.as` files (and `.ts` files in an
+  `asconfig.json` project) open, change, and close without being handed to
+  `tsserver`. AssemblyScript compiler analysis is not wired up yet — the service
+  currently tracks document contents only.
