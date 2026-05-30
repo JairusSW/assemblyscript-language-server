@@ -38,3 +38,10 @@ for that history. Entries below cover changes made in this fork.
   `asconfig.json` project) open, change, and close without being handed to
   `tsserver`. AssemblyScript compiler analysis is not wired up yet — the service
   currently tracks document contents only.
+* Publish AssemblyScript **syntax diagnostics** from the AssemblyScript parser
+  for open `.as`/AssemblyScript `.ts` documents, with `source: "assemblyscript"`.
+  Diagnostics are produced on open and on change and cleared on close. Parsing
+  is single-file and fault-tolerant; project-wide semantic diagnostics arrive
+  with the compile service in a later phase.
+* Externalize `assemblyscript` from the bundle (it is a runtime dependency),
+  keeping `lib/cli.mjs` lean instead of inlining the entire compiler.

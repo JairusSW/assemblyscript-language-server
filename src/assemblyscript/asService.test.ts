@@ -53,4 +53,39 @@ describe('AssemblyScript document routing', () => {
         // Closing clears any diagnostics the AssemblyScript service owns for the file.
         expect(diagnostics.get(docUri)?.diagnostics).toEqual([]);
     });
+
+    it('publishes AssemblyScript syntax diagnostics for an invalid .as document', () => {
+        const docUri = uri('syntax-error.as');
+        server.didOpenTextDocument({
+            textDocument: {
+                uri: docUri,
+                languageId: 'assemblyscript',
+                version: 1,
+                text: 'export function add(a: i32, b: i32): i32 { return a + }\n',
+            },
+        });
+
+        const published = diagnostics.get(docUri)?.diagnostics ?? [];
+        expect(published.length).toBeGreaterThan(0);
+        expect(published[0].source).toBe('assemblyscript');
+        expect(published[0].severity).toBe(lsp.DiagnosticSeverity.Error);
+
+        server.didCloseTextDocument({ textDocument: { uri: docUri } });
+    });
+
+    it('publishes no diagnostics for a valid .as document', () => {
+        const docUri = uri('valid.as');
+        server.didOpenTextDocument({
+            textDocument: {
+                uri: docUri,
+                languageId: 'assemblyscript',
+                version: 1,
+                text: '@inline export function add(a: i32, b: i32): i32 { return a + b; }\n',
+            },
+        });
+
+        expect(diagnostics.get(docUri)?.diagnostics).toEqual([]);
+
+        server.didCloseTextDocument({ textDocument: { uri: docUri } });
+    });
 });

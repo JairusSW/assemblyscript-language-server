@@ -7,20 +7,22 @@
 
 import * as lsp from 'vscode-languageserver';
 import { URI } from 'vscode-uri';
+import { Parser } from 'assemblyscript';
 import { LspDocument } from '../document.js';
 import type { LspClient } from '../lsp-client.js';
 import type { Logger } from '../utils/logger.js';
 import { PrefixingLogger } from '../utils/logger.js';
 import type { LanguageService } from '../languageService.js';
+import { toLspDiagnostics } from './diagnostics.js';
 
 /**
  * AssemblyScript-native analysis backend.
  *
- * Phase 0 scope: take ownership of AssemblyScript documents (so they are routed
- * away from `tsserver` and never double-analyzed) and track their contents in a
- * registry. No compiler analysis runs yet — parser diagnostics, project
- * discovery, and type facts are introduced in later phases. The document
- * registry established here is the foundation those phases build on.
+ * Tracks open AssemblyScript documents (so they are routed away from `tsserver`
+ * and never double-analyzed) and publishes syntax diagnostics from the
+ * AssemblyScript parser. Project discovery (`asconfig.json`), full semantic
+ * analysis, and type facts are introduced in later phases; this service is the
+ * foundation they build on.
  */
 export class AssemblyScriptLanguageService implements LanguageService {
     public readonly id = 'assemblyscript' as const;
@@ -69,7 +71,7 @@ export class AssemblyScriptLanguageService implements LanguageService {
         const document = new LspDocument(textDocument, AssemblyScriptLanguageService.filepath(textDocument.uri));
         this.documents.set(key, document);
         this.logger.log(`Opened AssemblyScript document ${textDocument.uri} (languageId: ${textDocument.languageId}).`);
-        // TODO(phase 1): run the parser and publish AssemblyScript diagnostics.
+        this.validate(document);
         return true;
     }
 
@@ -85,7 +87,28 @@ export class AssemblyScriptLanguageService implements LanguageService {
         for (const change of params.contentChanges) {
             document.applyEdit(textDocument.version, change);
         }
-        // TODO(phase 1): re-run the parser and refresh AssemblyScript diagnostics.
+        this.validate(document);
+    }
+
+    /**
+     * Parse the document with the AssemblyScript parser and publish the
+     * resulting syntax diagnostics. Parsing is single-file and fault-tolerant;
+     * project-wide semantic diagnostics arrive with the compile service in a
+     * later phase.
+     *
+     * TODO(phase 2): debounce + single-flight once the (expensive) full compile
+     * runs here; the parser alone is cheap enough to run synchronously.
+     */
+    private validate(document: LspDocument): void {
+        const parser = new Parser();
+        parser.parseFile(document.getText(), AssemblyScriptLanguageService.parsePath(document), true);
+        const diagnostics = toLspDiagnostics(parser.diagnostics, document);
+        this.lspClient.publishDiagnostics({ uri: document.uri.toString(), diagnostics });
+    }
+
+    /** A forward-slash-normalized path for the AssemblyScript parser/source. */
+    private static parsePath(document: LspDocument): string {
+        return document.filepath.replace(/\\/g, '/');
     }
 
     closeDocument(uri: lsp.DocumentUri): void {

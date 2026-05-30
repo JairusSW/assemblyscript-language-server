@@ -7,6 +7,10 @@ import { rollupForceExit } from './rollup-exit-plugin.js';
 
 export default defineConfig({
     input: 'src/cli.ts',
+    // `assemblyscript` is a runtime dependency (the compiler API). Keep it out of
+    // the bundle so it is resolved from node_modules at runtime instead of
+    // inlining the entire compiler (~13MB) into lib/cli.mjs.
+    external: ['assemblyscript', /^assemblyscript\//],
     output: [
         {
             banner: '#!/usr/bin/env node',
